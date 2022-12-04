@@ -4,6 +4,7 @@ import psycopg2
 from sqlalchemy import create_engine
 import requests, io, json, os, re
 from nltk.sentiment import SentimentIntensityAnalyzer
+import matplotlib.pyplot as plt
 
 
 # Function to open text file and read Twitter handles
@@ -64,22 +65,25 @@ def getTweetHistory(userListIds):
         print()
         print("name: {} username: {} id: {}".format(user[0], user[1], user[2]))
         print()
-        #url = "https://api.twitter.com/2/users/{}/tweets?start_time=2019-01-01T00:00:00Z&tweet.fields=created_at".format(user[2])
-        #url = "https://api.twitter.com/2/users/{}/tweets?tweet.fields=created_at".format(user[2])
-        url = "https://api.twitter.com/2/users/{}/tweets?tweet.fields=created_at&expansions=author_id&user.fields=created_at&max_results=100".format(user[2])
+        url = "https://api.twitter.com/2/users/{}/tweets?tweet.fields=created_at&start_time=2020-01-01T00:00:00.00Z&expansions=author_id&user.fields=created_at&max_results=100".format(user[2])
         print('url:', url)
-        tweetListData, isNextToken = getTweets(url, {})
-        #print('isNextToken:', isNextToken)
-        for tweetData in tweetListData:
-            tweetDataCompiled.append([user[0], user[1], user[2], tweetData[0], tweetData[1]])
-
-        while (len(isNextToken) > 0):
-            #url = "https://api.twitter.com/2/users/{}/tweets?start_time=2019-01-01T00:00:00Z&tweet.fields=created_at&expansions=author_id&user.fields=created_at&max_results=100&pagination_token={}".format(user[2], isNextToken)
-            url = "https://api.twitter.com/2/users/{}/tweets?tweet.fields=created_at&expansions=author_id&user.fields=created_at&max_results=100&pagination_token={}".format(user[2], isNextToken)
-            print('url:', url)
+        try:
             tweetListData, isNextToken = getTweets(url, {})
             for tweetData in tweetListData:
                 tweetDataCompiled.append([user[0], user[1], user[2], tweetData[0], tweetData[1]])
+        except:
+            print("No tweets returned")
+
+        while (len(isNextToken) > 0):
+            #url = "https://api.twitter.com/2/users/{}/tweets?start_time=2019-01-01T00:00:00Z&tweet.fields=created_at&expansions=author_id&user.fields=created_at&max_results=100&pagination_token={}".format(user[2], isNextToken)
+            url = "https://api.twitter.com/2/users/{}/tweets?tweet.fields=created_at&start_time=2020-01-01T00:00:00.00Z&expansions=author_id&user.fields=created_at&max_results=100&pagination_token={}".format(user[2], isNextToken)
+            print('url:', url)
+            try:
+                tweetListData, isNextToken = getTweets(url, {})
+                for tweetData in tweetListData:
+                    tweetDataCompiled.append([user[0], user[1], user[2], tweetData[0], tweetData[1]])
+            except:
+                print("No tweets returned")
 
     dfTweets = pd.DataFrame(tweetDataCompiled, columns=['name', 'username', 'id', 'Time', 'Tweet Text'])
     return dfTweets
@@ -151,25 +155,27 @@ def importTweetsFromMongoDB():
     return tweetsDataDF
 
 
-def regexRemoveNewLine(inputText):
+def regexRemoveNewLineTab(inputText):
     pattern = re.compile(r'(\n+)')
     updatedText = pattern.sub(r'___', inputText)
-    return updatedText
+    pattern2 = re.compile(r'(\r+)')
+    updatedText2 = pattern2.sub(r'___', updatedText)
+    return updatedText2
 
 
 def cleanTweetText(df):
-    df['TweetText'] = df['TweetText'].apply(regexRemoveNewLine)
+    df['TweetText'] = df['TweetText'].apply(regexRemoveNewLineTab)
     print('New Line characters have been removed from TweetText column of the dataframe')
     
     
 def analyseSentiment(textToAnalyse):
-    print('Calculating the SentimentScore for all tweets')
     sia = SentimentIntensityAnalyzer()
     sentimentScore = sia.polarity_scores(textToAnalyse)
     return sentimentScore['compound']
     
 
 def loadTweetsDataToPostgreSQL(df):
+    print('Loading Tweets to PostgreSQL')
     engine = create_engine('postgresql+psycopg2://postgres:@localhost/postgres')
 
     #df.head(0).to_sql('tweetdata', engine, index=False) 
@@ -183,6 +189,72 @@ def loadTweetsDataToPostgreSQL(df):
     contents = output.getvalue()
     cur.copy_from(output, 'tweetdata', null="") # null values become ''
     conn.commit()
+
+def createPostgreSentimentTable():
+    print('Running createPostgreSentimentTable')
+    sqlAddTweetDateColumn = """
+        ALTER TABLE public.tweetdata
+        ADD COLUMN TweetDate date;
+        """
+    sqlPopulateTweetDateColumn = """
+        update public.tweetdata
+        set TweetDate = TO_DATE(left("TweetPostTime", 10),'YYYY-MM-DD');
+        """
+    sqlCreateTweetSentimentTable = """
+        DROP TABLE IF EXISTS TweetSentiment;
+        CREATE TABLE TweetSentiment (
+        TweetDate date Primary Key,
+        AvgSentimentScore NUMERIC(9, 8) NULL,
+        SentimentScoreTotal NUMERIC(9, 6) NULL);
+        """
+    sqlInsertToTweetSentimentTable = """
+        insert into public.tweetsentiment(TweetDate, AvgSentimentScore)
+        select tweetdate, avg("SentimentScore")
+        from  public.tweetdata
+        where "SentimentScore" <> 0
+        group by tweetdate
+        order by tweetdate desc;
+        """
+    sqlCalcSentimentScoreTotal = """
+        update public.tweetsentiment twsentiment
+        set SentimentScoreTotal = runningTotal.runningSentimentScoreTotal
+            from (select 
+            TweetDate, 
+            AvgSentimentScore,
+            SUM(AvgSentimentScore) OVER (ORDER BY TweetDate) AS runningSentimentScoreTotal
+            FROM public.tweetsentiment) runningTotal
+        where twsentiment.TweetDate = runningTotal.TweetDate
+        """
+        
+    conn = psycopg2.connect("host=localhost dbname=postgres user=postgres")
+    cur = conn.cursor()
+    
+    try:
+        cur.execute(sqlAddTweetDateColumn)
+    finally:
+        conn.commit()
+        print('sqlAddTweetDateColumn is running.')
+    try:
+        cur.execute(sqlPopulateTweetDateColumn)
+    finally:
+        conn.commit()
+        print('sqlPopulateTweetDateColumn is running.')
+    try:
+        cur.execute(sqlCreateTweetSentimentTable)
+    finally:
+        conn.commit()
+        print('sqlCreateTweetSentimentTable is running.')
+    try:
+        cur.execute(sqlInsertToTweetSentimentTable)
+    finally:
+        conn.commit()
+        print('sqlInsertToTweetSentimentTable is running.')
+    try:
+        cur.execute(sqlCalcSentimentScoreTotal)
+    finally:
+        conn.commit()
+        print('sqlCalcSentimentScoreTotal is running.')
+    cur.close()  
     
 
 def importFromPostgreSQL():
@@ -193,7 +265,7 @@ def importFromPostgreSQL():
     dbConnection = engine.connect()
 
     # Read data from PostgreSQL database table and load into a DataFrame instance
-    dataFrameTW = pd.read_sql("select * from postgres.public.tweetdata limit 10", dbConnection)
+    dataFrameTW = pd.read_sql("select * from postgres.public.tweetsentiment", dbConnection)
     
     pd.set_option('display.expand_frame_repr', False)
 
@@ -201,8 +273,14 @@ def importFromPostgreSQL():
     dbConnection.close()
     
     return dataFrameTW
-	
-	
+
+
+def generateSentimentChart():
+    plt.plot(dfTwitterSentiment["tweetdate"], dfTwitterSentiment["sentimentscoretotal"])
+    plt.xlabel("Date")
+    plt.ylabel("Accumulated Sentiment Total")
+    plt.show()
+    
 ############################################################################################################################################
 
 # Main
@@ -213,7 +291,7 @@ bearer_token = os.environ.get("BEARER_TOKEN")
 
     
 # STEP 1: Get list of Twitter account handles from CSV file
-twitterUsers = readTwitterUserFile('TwitterHandleList.csv')
+twitterUsers = readTwitterUserFile('TwitterHandleList2.csv')
 # STEP 2: Generate https request string for Twitter accounts
 twitterUsersQuery = generateAPIAccountQuery(twitterUsers)
 # STEP 3: Send request to Twitter API to return account Ids. 
@@ -229,9 +307,13 @@ tweetsDataFrame = importTweetsFromMongoDB()
 # STEP 8: Clean Tweet Text to remove New Line characters
 cleanTweetText(tweetsDataFrame)
 # STEP 9: Run Sentiment Analysis on all tweets and add 'SentimentScore' column to the DataFrame
+print('Calculating the SentimentScore for all tweets')
 tweetsDataFrame['SentimentScore'] = tweetsDataFrame['TweetText'].apply(analyseSentiment)
 # STEP 10: Load Data to PostgreSQL Database
 loadTweetsDataToPostgreSQL(tweetsDataFrame)
-# STEP 11: Twitter Data imported from PostgreSQL Database
-dfTwitterData = importFromPostgreSQL()
-dfTwitterData.head()
+# STEP 11: Generate SentimentTable and calculate Average Daily Sentiment
+createPostgreSentimentTable()
+# STEP 12: Imported Average Sentiment from PostgreSQL Database to a Python Dataframe
+dfTwitterSentiment = importFromPostgreSQL()
+# STEP 13: Generate Sentiment Chart
+generateSentimentChart()
