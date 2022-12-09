@@ -5,6 +5,8 @@ from sqlalchemy import create_engine
 import requests, io, json, os, re
 from nltk.sentiment import SentimentIntensityAnalyzer
 import matplotlib.pyplot as plt
+import yaml
+import dbfuncs as dbf
 
 
 # Function to open text file and read Twitter handles
@@ -32,13 +34,11 @@ def generateAPIAccountQuery(twUsers):
         user_search_url = user_search_url + "," + user
     return user_search_url
 
-
 # Function to generate request headers authorised to access Twitter's API
 def bearer_oauth(r):
-    r.headers["Authorization"] = f"Bearer {bearer_token}"
+    r.headers["Authorization"] = f"Bearer AAAAAAAAAAAAAAAAAAAAAOH0jAEAAAAAAT1mQvzriiowqhlxxcD%2BiBT2QWI%3D5c45q78E693ygLYA2Eta0kDkpSZyzzDrwTxZ8WDf9hOsUVf84Z"
     r.headers["User-Agent"] = "v2FullArchiveSearchPython"
     return r
-
 
 # Function to send GET requests to the Twitter API
 def connect_to_endpoint(url, params):
@@ -47,7 +47,6 @@ def connect_to_endpoint(url, params):
     if response.status_code != 200:
         raise Exception(response.status_code, response.text)
     return response.json()
-
 
 # Function to pass Twitter usernames and return user Ids 
 def getUserIds(url, params):
@@ -106,9 +105,9 @@ def getTweets(url, params):
     return tweetListData, listNextToken
 
 
-def emptyTweetsCollection():
+def emptyTweetsCollection(host, port):
     # Connect to MongoDB
-    client = pymongo.MongoClient("mongodb://localhost:27017/")
+    client = pymongo.MongoClient(host,port)
  
     # Database Name
     db = client['myTwitterDB']
@@ -120,9 +119,9 @@ def emptyTweetsCollection():
     print('All records deleted from MongoDB tweetsCollection')
     
 
-def loadTweetsToMongoDB(inputTweetsDF):
+def loadTweetsToMongoDB(inputTweetsDF, host, port):
     # Connect to MongoDB
-    client = pymongo.MongoClient("mongodb://localhost:27017/")
+    client = pymongo.MongoClient(host,port)
     
     # Database Name
     db = client['myTwitterDB']
@@ -137,9 +136,9 @@ def loadTweetsToMongoDB(inputTweetsDF):
     print('Tweets loaded to MongoDB tweetsCollection')
     
 
-def importTweetsFromMongoDB():
+def importTweetsFromMongoDB(host,port):
     # Connect to MongoDB
-    client = pymongo.MongoClient("mongodb://localhost:27017/")
+    client = pymongo.MongoClient(host,port)
     
     # Database Name
     db = client['myTwitterDB']
@@ -174,9 +173,10 @@ def analyseSentiment(textToAnalyse):
     return sentimentScore['compound']
     
 
-def loadTweetsDataToPostgreSQL(df):
+def loadTweetsDataToPostgreSQL(df, engineStr):
     print('Loading Tweets to PostgreSQL')
-    engine = create_engine('postgresql+psycopg2://postgres:@localhost/postgres')
+    engine = create_engine(engineStr)
+    #engine = create_engine('postgresql+psycopg2://postgres:@localhost/postgres')
 
     #df.head(0).to_sql('tweetdata', engine, index=False) 
     df.head(0).to_sql('tweetdata', engine, if_exists='replace',index=False) #drops old table and creates new empty table
@@ -190,7 +190,7 @@ def loadTweetsDataToPostgreSQL(df):
     cur.copy_from(output, 'tweetdata', null="") # null values become ''
     conn.commit()
 
-def createPostgreSentimentTable():
+def createPostgreSentimentTable(config):
     print('Running createPostgreSentimentTable')
     sqlAddTweetDateColumn = """
         ALTER TABLE public.tweetdata
@@ -226,7 +226,14 @@ def createPostgreSentimentTable():
         where twsentiment.TweetDate = runningTotal.TweetDate
         """
         
-    conn = psycopg2.connect("host=localhost dbname=postgres user=postgres")
+    #conn = psycopg2.connect("host=localhost dbname=postgres user=postgres")
+    # conn = psycopg2.connect(user = config['postgreSQL']['username'],
+    #     password = config['postgreSQL']['password'],
+    #     host = config['postgreSQL']['hostname'],
+    #     port = config['postgreSQL']['port'],
+    #     database = config['postgreSQL']['database'])
+
+    conn = dbf.getDBConnection(config, config['postgreSQL']['database'])      
     cur = conn.cursor()
     
     try:
@@ -257,15 +264,15 @@ def createPostgreSentimentTable():
     cur.close()  
     
 
-def importFromPostgreSQL():
+def importFromPostgreSQL(engineStr):
     # Create an engine instance
-    engine = create_engine('postgresql+psycopg2://postgres:@localhost/postgres')
-
+    #engine = create_engine('postgresql+psycopg2://postgres:@localhost/postgres')
+    engine = create_engine(engineStr)
     # Connect to PostgreSQL server
     dbConnection = engine.connect()
 
     # Read data from PostgreSQL database table and load into a DataFrame instance
-    dataFrameTW = pd.read_sql("select * from postgres.public.tweetsentiment", dbConnection)
+    dataFrameTW = pd.read_sql("select * from public.tweetsentiment", dbConnection)
     
     pd.set_option('display.expand_frame_repr', False)
 
@@ -275,11 +282,13 @@ def importFromPostgreSQL():
     return dataFrameTW
 
 
-def generateSentimentChart():
+def generateSentimentChart(dfTwitterSentiment):
     plt.plot(dfTwitterSentiment["tweetdate"], dfTwitterSentiment["sentimentscoretotal"])
     plt.xlabel("Date")
     plt.ylabel("Accumulated Sentiment Total")
     plt.show()
+    
+##
     
 ############################################################################################################################################
 
@@ -287,33 +296,58 @@ def generateSentimentChart():
 
 # Bearer Token provides access the Twitter API
 # Set as environment variable on local machine
-bearer_token = os.environ.get("BEARER_TOKEN")
 
+## Read Config
+config = yaml.safe_load(open("config.yaml"))
+
+# postgresStr = 'postgresql://dap:dap@192.168.56.30:5432/postgres'    
+postgresStr = 'postgresql://' + config['postgreSQL']['username'] + ':' + config['postgreSQL']['password'] + '@' + config['postgreSQL']['hostname']  + '/' + config['postgreSQL']['database']
+print(postgresStr)
+        
+#bearer_token = os.environ.get("BEARER_TOKEN")
     
 # STEP 1: Get list of Twitter account handles from CSV file
 twitterUsers = readTwitterUserFile('TwitterHandleList2.csv')
+
 # STEP 2: Generate https request string for Twitter accounts
 twitterUsersQuery = generateAPIAccountQuery(twitterUsers)
+
 # STEP 3: Send request to Twitter API to return account Ids. 
 userListIdentifiers = getUserIds(twitterUsersQuery, {})
+
 # STEP 4: Send request to Twitter API to return Tweets sent by accounts. 
 dfTweets = getTweetHistory(userListIdentifiers)
+
 # STEP 5: Delete Tweets Collection from MongoDB
-emptyTweetsCollection()
+mongoHost = config['mongoDB']['hostname']
+mongoPort = config['mongoDB']['port']
+emptyTweetsCollection(mongoHost, mongoPort)
+
 # STEP 6: Load Tweets to MongoDB
-loadTweetsToMongoDB(dfTweets)
+loadTweetsToMongoDB(dfTweets, mongoHost, mongoPort)
+
 # STEP 7: Import Tweets from MongoDB
-tweetsDataFrame = importTweetsFromMongoDB()
+tweetsDataFrame = importTweetsFromMongoDB(mongoHost, mongoPort )
+
 # STEP 8: Clean Tweet Text to remove New Line characters
 cleanTweetText(tweetsDataFrame)
+
 # STEP 9: Run Sentiment Analysis on all tweets and add 'SentimentScore' column to the DataFrame
+## nltk
+import nltk
+print('downloading lexicon')
+nltk.download('vader_lexicon')
 print('Calculating the SentimentScore for all tweets')
 tweetsDataFrame['SentimentScore'] = tweetsDataFrame['TweetText'].apply(analyseSentiment)
+
 # STEP 10: Load Data to PostgreSQL Database
-loadTweetsDataToPostgreSQL(tweetsDataFrame)
+loadTweetsDataToPostgreSQL(tweetsDataFrame, postgresStr)
+
 # STEP 11: Generate SentimentTable and calculate Average Daily Sentiment
-createPostgreSentimentTable()
+createPostgreSentimentTable(config)
+
 # STEP 12: Imported Average Sentiment from PostgreSQL Database to a Python Dataframe
-dfTwitterSentiment = importFromPostgreSQL()
+dfTwitterSentiment = importFromPostgreSQL(postgresStr)
+
 # STEP 13: Generate Sentiment Chart
-generateSentimentChart()
+generateSentimentChart(dfTwitterSentiment)
