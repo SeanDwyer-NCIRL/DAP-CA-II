@@ -3,45 +3,14 @@ import pandas as pd
 import pandas.io.sql as sqlio
 import psycopg2
 from sodapy import Socrata
-import matplotlib as mpl
+import matplotlib.pyplot as plt
 import yaml
 import dbfuncs as db
 
 ## Read Config
 config = yaml.safe_load(open("config.yaml"))
+databasename = config["postgreSQL"]["database"]
 
-for item, doc in config.items():
-    print(item, ":", doc)
- 
-def createDBIfNotExists ():
-    try:
-        dbConnection = db.getDBConnection(config, 'postgres')
-        with dbConnection.cursor() as cursor:
-                cursor.execute('SELECT FROM pg_database WHERE datname = \'cospdb\'')        
-                data = cursor.fetchall()
-                print(cursor.rowcount)
-    except (Exception , psycopg2.Error) as dbError :
-        print ("Error:", dbError)
-    finally:
-        cursor.close()
-        if(dbConnection):
-            dbConnection.close()
-
-    if (not data):
-        try:
-            print("Creating cospdb database")
-            conn = db.getDBConnection(config,'postgres')
-            conn.autocommit = True
-            cursor = conn.cursor()
-            sql = '''CREATE DATABASE cospdb''';
-            cursor.execute(sql)
-        except (Exception , psycopg2.Error) as dbError :
-            print ("Error:", dbError)
-        finally:
-            cursor.close()
-            if(dbConnection):
-                dbConnection.close() 
-    
 ########## Consumer Spending Percentage Change Downloaded and Converted to CSV ###########
 # This is updated weekly
 # See https://dev.socrata.com/foundry/data.ct.gov/xpjq-6wxn for details/code
@@ -92,8 +61,7 @@ spend_df.to_csv("consumer_spending.csv", index=False)
 # finally:
     # if(conn):
         # conn.close()
-        
-createDBIfNotExists()
+
 
 # Create Table
 cosp_table ="""
@@ -113,7 +81,7 @@ cosp_table ="""
 )
 """
 try:
-    conn = db.getDBConnection(config,'cospdb')
+    conn = db.getDBConnection(config,databasename)
     cursor = conn.cursor()
     cursor.execute(cosp_table)
     conn.commit()
@@ -125,7 +93,7 @@ finally:
 
 # insert csv data in to table
 try:
-    conn = db.getDBConnection(config,'cospdb')
+    conn = db.getDBConnection(config,databasename)
     cursor = conn.cursor()
     with open('consumer_spending.csv', 'r') as f:
         next(f) 
@@ -149,7 +117,7 @@ avg_week_year = """SELECT date_part('year', date_day::date) as year,
        ORDER BY year, weekly;"""
 
 try:
-    conn = db.getDBConnection(config,'cospdb')
+    conn = db.getDBConnection(config,databasename)
     cosp_df = sqlio.read_sql_query(avg_week_year, conn)
     cosp_df.to_csv('all_avg_week_year.csv')
 except (Exception , psycopg2.Error) as dbError :
@@ -160,3 +128,23 @@ finally:
 
 
 cosp_df.to_csv('all_avg_week_year.csv')
+
+try:
+    plt.plot(cosp_df['total'], label = 'All')
+    plt.plot(cosp_df['acf'], label = 'Accom. & Food Service')
+    plt.plot(cosp_df['aer'], label = 'Arts, Enter., Rec.')
+    plt.plot(cosp_df['apg'], label = 'Gen. Merch. & Apparel')
+    plt.plot(cosp_df['grf'], label = 'Groc. & Food Store')
+    plt.plot(cosp_df['hcs'], label = 'Health & Social Ass.')
+    plt.plot(cosp_df['tws'], label = 'Transport & Wareh.')
+    plt.plot(cosp_df['retail'], label = 'Retail Spending')
+    plt.plot(cosp_df['retail_nogroc'], label = 'Retail Excl. Groc.')
+    plt.ylabel('% Chnage', fontsize=14)
+    plt.xlabel('Week', fontsize=14)
+    plt.title('Consumer Spending per Sector', fontsize=16)
+    plt.legend()
+except (Exception) as Error :
+    print ("Error:", Error)
+finally:
+    plt.show()
+
