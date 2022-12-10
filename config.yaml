@@ -1,0 +1,14 @@
+### Mongo Database
+  mongoDB:
+    hostname: 192.168.56.30
+    port: 27017
+    username: root
+    password: root
+    
+  postgreSQL:
+    hostname: 192.168.56.30
+    port: 5432
+    username: 'dap'
+    password: 'dap' 
+    database: 'cospdb'
+ 
