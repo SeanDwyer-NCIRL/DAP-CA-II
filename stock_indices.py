@@ -26,15 +26,15 @@ def replace_postgres_with_price_chg_history(df, postgresStr) :
     engine = create_engine(postgresStr)
     df.to_sql('close_price_change',engine,if_exists='replace')
                             
-def get_ticker_history (symbol, period, start, end):
+def get_ticker_history (symbol, start, end, interval):
      # Retrieve data from Yahoo! Finance
     tickerData = yf.Ticker(symbol)
-    tickerDf = tickerData.history(period=period, start=start, end=end) 
+    tickerDf = tickerData.history(start=start, end=end, interval=interval) 
     tickerDf['ticker'] = symbol 
     return tickerDf
 
-def get_ticker_history_dr (symbol, period, start, end):
-    tickerData = web.get_data_yahoo(symbol, start=start, end=end,)
+def get_ticker_history_dr (symbol, start, end, interval):
+    tickerData = web.get_data_yahoo(symbol, start=start, end=end,interval=interval)
     tickerData['ticker'] = symbol
     return tickerData
     
@@ -43,12 +43,12 @@ def get_major_stock_indices():
     StockIdxs = df_list[0]
     return StockIdxs
     
-def get_s_and_p_equities():
+def get_s_and_p_equities(interval):
     tickers = ['^SP500-255040','^SP500-60','^SP500-35','^SP500-30']
 
     stock_list = []
     for s in tickers:
-        df = get_ticker_history_dr(s,'1d','2020-01-01','2022-11-30')
+        df = get_ticker_history(s,'2020-01-01','2022-11-30',interval)
         stock_list.append(df)
 
         # Concatenate all data
@@ -72,7 +72,7 @@ def getRegion(ticker, cat_index):
         if ticker in cat_index[k]:
             return k
         
-def retBegin(ticker, val, begRef):
+def calcClosePC(ticker, val, begRef):
     start_val = begRef.loc[begRef.ticker == ticker, 'Close'].values[0]
     return (val/start_val - 1) * 100
     
@@ -119,7 +119,7 @@ mongoPort = config['mongoDB']['port']
 
 
 ## 1 - Get financial info from yahoo
-msi =  get_s_and_p_equities()
+msi =  get_s_and_p_equities('1d')
 
 ## 2 - add raw ticker data  MongoDB collection
 smi_collection = get_mongo_db_smi_collection(mongoHost, mongoPort)
@@ -129,11 +129,16 @@ print ('added ' + str(rowsadded) + ' to collection')
 ## 3 -  categorize share indexes using lambda functions
 category_idx = { 'S&P 500 Share Indices' :['^SP500-255040','^SP500-60','^SP500-35','^SP500-30']}
 msi['region']= msi.ticker.apply(lambda x: getRegion(x, category_idx))
+msi.head()
 
 ## 4 - set up close price data 
-beginHere  = msi.loc[msi.Date == '2020-01-02']
-msi['chBegin'] = msi.apply(lambda x: retBegin(x.ticker, x.Close, beginHere),axis=1)
+startdate = msi["Date"].iloc[0]
+print(startdate)
+beginHere  = msi.loc[msi.Date == startdate]
+print(beginHere)
+msi['chBegin'] = msi.apply(lambda x: calcClosePC(x.ticker, x.Close, beginHere),axis=1)
 changeDf = transform_ticker_data(msi)
+changeDf.head()
 
 ## 5 - insert close price change data into Postgres database for comparison analysis
 replace_postgres_with_price_chg_history(changeDf,postgresStr)
@@ -142,12 +147,6 @@ replace_postgres_with_price_chg_history(changeDf,postgresStr)
 si_dict = {'^SP500-255040': 'S&P 500 Specialty Retail (Industry)',
            '^SP500-60': 'S&P 500 Real Estate (Sector)', 
            '^SP500-35': 'S&P 500 Health Care (Sector)',
-          '^SP500-30': 'Consumer Staples (Sector)'}
+          '^SP500-30': 'S&P 500 Consumer Staples (Sector)'}
 
 plot_close_change(category_idx,changeDf, si_dict )
-
-
-
-
-
-

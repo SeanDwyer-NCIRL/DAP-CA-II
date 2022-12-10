@@ -3,7 +3,7 @@ import pandas as pd
 import pandas.io.sql as sqlio
 import psycopg2
 from sodapy import Socrata
-import matplotlib as mpl
+import matplotlib.pyplot as plt
 import yaml
 import dbfuncs as db
 
@@ -128,3 +128,23 @@ finally:
 
 
 cosp_df.to_csv('all_avg_week_year.csv')
+
+try:
+    plt.plot(cosp_df['total'], label = 'All')
+    plt.plot(cosp_df['acf'], label = 'Accom. & Food Service')
+    plt.plot(cosp_df['aer'], label = 'Arts, Enter., Rec.')
+    plt.plot(cosp_df['apg'], label = 'Gen. Merch. & Apparel')
+    plt.plot(cosp_df['grf'], label = 'Groc. & Food Store')
+    plt.plot(cosp_df['hcs'], label = 'Health & Social Ass.')
+    plt.plot(cosp_df['tws'], label = 'Transport & Wareh.')
+    plt.plot(cosp_df['retail'], label = 'Retail Spending')
+    plt.plot(cosp_df['retail_nogroc'], label = 'Retail Excl. Groc.')
+    plt.ylabel('% Chnage', fontsize=14)
+    plt.xlabel('Week', fontsize=14)
+    plt.title('Consumer Spending per Sector', fontsize=16)
+    plt.legend()
+except (Exception) as Error :
+    print ("Error:", Error)
+finally:
+    plt.show()
+
