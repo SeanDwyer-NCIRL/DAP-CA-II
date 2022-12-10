@@ -301,7 +301,8 @@ def generateSentimentChart(dfTwitterSentiment):
 config = yaml.safe_load(open("config.yaml"))
 
 # postgresStr = 'postgresql://dap:dap@192.168.56.30:5432/postgres'    
-postgresStr = 'postgresql://' + config['postgreSQL']['username'] + ':' + config['postgreSQL']['password'] + '@' + config['postgreSQL']['hostname']  + '/' + config['postgreSQL']['database']
+#postgresStr = 'postgresql://' + config['postgreSQL']['username'] + ':' + config['postgreSQL']['password'] + '@' + config['postgreSQL']['hostname']  + '/' + config['postgreSQL']['database']
+postgresStr = dbf.getPostgresString(config)
 print(postgresStr)
         
 #bearer_token = os.environ.get("BEARER_TOKEN")

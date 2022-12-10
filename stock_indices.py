@@ -29,19 +29,19 @@ def replace_postgres_with_price_chg_history(df, postgresStr) :
 def get_ticker_history (symbol, period, start, end):
      # Retrieve data from Yahoo! Finance
     tickerData = yf.Ticker(symbol)
-    tickerDf = tickerData.history(period='1d', start=start, end=end) 
+    tickerDf = tickerData.history(period=period, start=start, end=end) 
     tickerDf['ticker'] = symbol 
     return tickerDf
 
 def get_ticker_history_dr (symbol, period, start, end):
-    tickerData = web.get_data_yahoo(symbol, start=start, end=end)
+    tickerData = web.get_data_yahoo(symbol, start=start, end=end,)
     tickerData['ticker'] = symbol
     return tickerData
     
 def get_major_stock_indices():
     df_list = pd.read_html('https://finance.yahoo.com/world-indices/')
-    majorStockIdxs = df_list[0]
-    return majorStockIdxs
+    StockIdxs = df_list[0]
+    return StockIdxs
     
 def get_s_and_p_equities():
     tickers = ['^SP500-255040','^SP500-60','^SP500-35','^SP500-30']
@@ -111,7 +111,7 @@ config = yaml.safe_load(open("config.yaml"))
 
 # Set db variables
 # postgresStr = 'postgresql://dap:dap@192.168.56.30:5432/postgres'    
-postgresStr = 'postgresql://' + config['postgreSQL']['username'] + ':' + config['postgreSQL']['password'] + '@' + config['postgreSQL']['hostname']  + '/' + config['postgreSQL']['database']
+postgresStr = db.getPostgresString(config)
 print(postgresStr)
 
 mongoHost = config['mongoDB']['hostname']
