@@ -18,4 +18,9 @@ def getPostgresString(config):
        postgresStr = 'postgresql://' + config['postgreSQL']['username'] + ':' + config['postgreSQL']['password'] + '@' + config['postgreSQL']['hostname']  + '/' + config['postgreSQL']['database']
 
     return postgresStr
+
+def getPostgresPsycopgString(config):
+    return getPostgresString(config)
+    
+    #return 'postgresql+psycopg2://' + config['postgreSQL']['database'] + ':@' + config['postgreSQL']['hostname']  + '/' + config['postgreSQL']['database']
     

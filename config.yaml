@@ -13,3 +13,8 @@
     password: 'dap' 
     database: 'cospdb'
  
+  ## use two or 50 twitter accounts
+  twitterfeed:
+    multiaccount: 'Yes'
+
+
