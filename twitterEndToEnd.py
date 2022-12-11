@@ -306,7 +306,11 @@ postgresStr = dbf.getPostgresString(config)
 print(postgresStr)
         
 #bearer_token = os.environ.get("BEARER_TOKEN")
-    
+if (config['twitterfeed']['multiaccount'] == 'Yes'):
+    twitterfilename = 'TwitterHandleListFull.csv'
+else:
+    twitterfilename = 'TwitterHandleList2.csv'
+
 # STEP 1: Get list of Twitter account handles from CSV file
 twitterUsers = readTwitterUserFile('TwitterHandleList2.csv')
 
@@ -351,4 +355,4 @@ createPostgreSentimentTable(config)
 dfTwitterSentiment = importFromPostgreSQL(postgresStr)
 
 # STEP 13: Generate Sentiment Chart
-generateSentimentChart(dfTwitterSentiment)
+# generateSentimentChart(dfTwitterSentiment)

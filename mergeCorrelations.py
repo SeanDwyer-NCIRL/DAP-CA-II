@@ -31,7 +31,7 @@ def importRetailSpendingFromPostgreSQL(postgresStr):
     return retailSpendingDF
 
 def importTwitterSentimentFromPostgreSQL(postgresStr):
-    twitterSentimentSQL = """select * from postgres.public.tweetsentiment"""
+    twitterSentimentSQL = """select * from public.tweetsentiment"""
     # Create an engine instance
     engine = create_engine(postgresStr)
     # Connect to PostgreSQL server
@@ -64,7 +64,7 @@ stockPricesDF = importStockPricesFromPostgreSQL(postgresStr)
 
 twitterSentDF['tweetdate'] = pd.to_datetime(twitterSentDF['tweetdate']).dt.date
 retailSpendingDF['date'] = pd.to_datetime(retailSpendingDF.apply(lambda x: datetime.strptime('{0} {1} 1'.format(int(x['year']), int(x['weekly'])), '%Y %W %w'), axis=1)).dt.date
-stockPricesDF['Date'] = pd.to_datetime(stockPricesDF['Date']).dt.date
+stockPricesDF['Date'] = pd.to_datetime(stockPricesDF['Date'],utc=True).dt.date
 
 combinedDf = pd.merge(twitterSentDF, retailSpendingDF, left_on='tweetdate', right_on='date', how = 'inner')
 combinedDf2 = pd.merge(combinedDf, stockPricesDF, left_on='tweetdate', right_on='Date', how = 'inner')
@@ -77,3 +77,18 @@ combinedFieldsDf = combinedDf2[['Date','avgsentimentscore','sentimentscoretotal'
 #Run Pearson correlation on all columns of the DataFrame.
 correlationsDf = combinedFieldsDf.corr()
 correlationsDf
+
+print(correlationsDf)
+
+### Plot 
+import plotters as pttrs
+
+# plot Consumer Spending per Sector
+pttrs.plot_consumer_spending(retailSpendingDF)
+
+# plot stock indices close change
+pttrs.plot_close_change(stockPricesDF)
+
+# plot Sentiment
+pttrs.generateSentimentChart(twitterSentDF)
+

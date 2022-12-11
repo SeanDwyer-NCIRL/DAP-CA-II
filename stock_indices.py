@@ -55,15 +55,15 @@ def get_s_and_p_equities(interval):
     msi = pd.concat(stock_list, axis = 0)
     msi = msi.reset_index()
 
-    msi['chBegin'] = '2020-01-01'
+    msi['ccBegin'] = '2020-01-01'
     return msi
  
 def transform_ticker_data(msi):
     # Transform the data to be ticker column-wise
-    chBegin = msi.groupby(['Date', 'ticker'])['chBegin'].first().unstack()
+    ccBegin = msi.groupby(['Date', 'ticker'])['ccBegin'].first().unstack()
     # Fill null values with the values on the row before
-    chBegin = chBegin.fillna(method='bfill')
-    return chBegin
+    ccBegin = ccBegin.fillna(method='bfill')
+    return ccBegin
 
 ## Lambdas 
 
@@ -77,7 +77,7 @@ def calcClosePC(ticker, val, begRef):
     return (val/start_val - 1) * 100
     
 ## Plot functions
-def plot_close_change(cat_idx, chBegin, si_dict):
+def plot_close_change(cat_idx, ccBegin, si_dict):
     plt.style.use('classic') 
     fig, axes = plt.subplots(1,1, figsize=(12, 8),sharex=True)
 
@@ -86,8 +86,8 @@ def plot_close_change(cat_idx, chBegin, si_dict):
     # foreach Index  
         ax = axes
         for j,t in enumerate(cat_idx[k]):      
-            ax.plot(chBegin.index, chBegin[t], marker='', linewidth=1, color = pallete[j])
-            ax.legend([si_dict[t] for t in category_idx[k]], loc='upper left', fontsize=7)
+            ax.plot(ccBegin.index, ccBegin[t], marker='', linewidth=1, color = pallete[j])
+            ax.legend([si_dict[t] for t in cat_idx[k]], loc='upper left', fontsize=7)
             ax.set_title(k, fontweight='bold')
 
     fig.text(0.5,0, "Year", ha="center", va="center", fontweight ="bold")
@@ -95,11 +95,6 @@ def plot_close_change(cat_idx, chBegin, si_dict):
     fig.suptitle("Close Price Change for S&P 500 Equites Indices 2020-2022", fontweight ="bold",y=1.05, fontsize=14)
     fig.tight_layout()
     ax.set_title(k, fontweight='bold')
-
-    fig.text(0.5,0, "Year", ha="center", va="center", fontweight ="bold")
-    fig.text(0,0.5, "Close Price Change (%)", ha="center", va="center", rotation=90, fontweight ="bold")
-    fig.suptitle("Close Price Change for S&P 500 Equites Indices 2020-2022", fontweight ="bold",y=1.05, fontsize=14)
-    fig.tight_layout()
     plt.show()
 
 
@@ -127,7 +122,7 @@ rowsadded = initialize_collection_with_ticker_data(smi_collection, msi)
 print ('added ' + str(rowsadded) + ' to collection')
 
 ## 3 -  categorize share indexes using lambda functions
-category_idx = { 'S&P 500 Share Indices' :['^SP500-255040','^SP500-60','^SP500-35','^SP500-30']}
+category_idx = { 'S&P 500 Share Indices Close Change %' :['^SP500-255040','^SP500-60','^SP500-35','^SP500-30']}
 msi['region']= msi.ticker.apply(lambda x: getRegion(x, category_idx))
 msi.head()
 
@@ -136,7 +131,7 @@ startdate = msi["Date"].iloc[0]
 print(startdate)
 beginHere  = msi.loc[msi.Date == startdate]
 print(beginHere)
-msi['chBegin'] = msi.apply(lambda x: calcClosePC(x.ticker, x.Close, beginHere),axis=1)
+msi['ccBegin'] = msi.apply(lambda x: calcClosePC(x.ticker, x.Close, beginHere),axis=1)
 changeDf = transform_ticker_data(msi)
 changeDf.head()
 
@@ -149,4 +144,5 @@ si_dict = {'^SP500-255040': 'S&P 500 Specialty Retail (Industry)',
            '^SP500-35': 'S&P 500 Health Care (Sector)',
           '^SP500-30': 'S&P 500 Consumer Staples (Sector)'}
 
-plot_close_change(category_idx,changeDf, si_dict )
+#plot_close_change(category_idx,changeDf, si_dict )
+
