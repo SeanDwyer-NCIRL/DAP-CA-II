@@ -5,7 +5,7 @@ Repository for code and docs related to the Database and Analytics Programming C
 * Please set the database settings to the correct host/port and username/password 
 
 ## The multiaccount configuration item is set to 'Yes' to use 50+ twitter accounts
-    *NB. this will take **at least 30 minutes** *
+    *NB. this will take _at least 30 minutes_ *
 
 ## To opt for a (very) limited dataset, this configuration item can be set to 'no'
 ### This will have a much shorter execution time, but results will vary considerably
